@@ -1,0 +1,4 @@
+# CI and validation example (fictional key, not real).
+cluster:
+  name: ci-kind
+apiKey: rka_0123456789abcdefghijABCDEFGHIJ0123456789abc

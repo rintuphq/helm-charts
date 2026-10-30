@@ -1,0 +1,80 @@
+{{- if .Values.clusterAgent.enabled }}
+{{- $ca := .Values.clusterAgent }}
+# Cluster agent: watches the Kubernetes API with get/list/watch only (ClusterRole; no Secrets). With more than one replica
+# a coordination.k8s.io Lease elects a single leader that sends reports. Compatible with Pod Security "restricted" (no hostPath).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "rintup-agent.fullname" . }}-cluster
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "rintup-agent.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cluster-agent
+spec:
+  replicas: {{ $ca.replicas }}
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      {{- include "rintup-agent.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: cluster-agent
+  template:
+    metadata:
+      labels:
+        {{- include "rintup-agent.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: cluster-agent
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "rintup-agent.serviceAccountName" . }}
+      automountServiceAccountToken: true
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 10
+      {{- with (default .Values.priorityClassName $ca.priorityClassName) }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- include "rintup-agent.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: cluster-agent
+          image: {{ include "rintup-agent.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["cluster"]
+          securityContext:
+            {{- include "rintup-agent.containerSecurityContext" . | nindent 12 }}
+          env:
+            {{- include "rintup-agent.commonEnv" . | nindent 12 }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: RINTUP_LEASE_NAME
+              value: {{ include "rintup-agent.leaseName" . | quote }}
+          resources:
+            {{- toYaml $ca.resources | nindent 12 }}
+      {{- with $ca.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $ca.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $ca.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

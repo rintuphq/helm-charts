@@ -1,0 +1,81 @@
+# Publishes every chart whose version is not in the registry yet, as an OCI artifact:
+#   oci://ghcr.io/rintuphq/charts/<chart>:<version>
+# then signs it with cosign (keyless, GitHub OIDC). Runs on pushes to main that touch charts/.
+#
+# Settings: none beyond the default GITHUB_TOKEN (packages: write). After the first push, make the
+# "charts/rintup-agent" package public in the organization's package settings and link it to this repository.
+#
+# Verify a chart:
+#   cosign verify ghcr.io/rintuphq/charts/rintup-agent:<version> \
+#     --certificate-identity 'https://github.com/rintuphq/helm-charts/.github/workflows/release.yml@refs/heads/main' \
+#     --certificate-oidc-issuer https://token.actions.githubusercontent.com
+name: release
+
+on:
+  push:
+    branches: [main]
+    paths: ["charts/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  REPOSITORY: ghcr.io/rintuphq/charts
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write # helm push to ghcr.io
+      id-token: write # cosign keyless signing
+    steps:
+      - uses: actions/checkout@v7
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.17.3
+      - uses: sigstore/cosign-installer@v4
+      - name: Log in to GHCR
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          printf '%s' "$TOKEN" | helm registry login "$REGISTRY" -u "$ACTOR" --password-stdin
+          printf '%s' "$TOKEN" | cosign login "$REGISTRY" -u "$ACTOR" --password-stdin
+      - name: Package, push and sign new chart versions
+        env:
+          IDENTITY: https://github.com/${{ github.workflow_ref }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/packages"
+          for dir in charts/*/; do
+            chart=${dir%/}
+            name=$(yq '.name' "$chart/Chart.yaml")
+            version=$(yq '.version' "$chart/Chart.yaml")
+            if helm show chart "oci://$REPOSITORY/$name" --version "$version" >/dev/null 2>&1; then
+              echo "$name $version already published, skipping"
+              continue
+            fi
+            helm package "$chart" -d "$RUNNER_TEMP/packages"
+            out=$(helm push "$RUNNER_TEMP/packages/$name-$version.tgz" "oci://$REPOSITORY" 2>&1)
+            echo "$out"
+            digest=$(grep -oE 'sha256:[0-9a-f]{64}' <<<"$out" | head -n1)
+            [ -n "$digest" ] || { echo "no digest in helm push output"; exit 1; }
+            ref="$REPOSITORY/$name@$digest"
+            cosign sign --yes "$ref"
+            cosign verify "$ref" \
+              --certificate-identity "$IDENTITY" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com >/dev/null
+            {
+              echo "### $name $version"
+              echo "- Chart: \`oci://$REPOSITORY/$name\` version \`$version\`"
+              echo "- Digest: \`$digest\` (cosign signed, keyless)"
+            } >> "$GITHUB_STEP_SUMMARY"
+          done

@@ -1,0 +1,51 @@
+# Chart checks on every pull request and push to main: helm lint --strict, kubeconform (Kubernetes 1.29 and 1.33),
+# values.schema.json negative cases and security defaults (scripts/verify.sh). On pull requests a changed chart
+# must also bump its version, because a published version is never overwritten.
+name: lint
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Lint, schema and kubeconform
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      KUBECONFORM_VERSION: v0.7.0
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.17.3
+      - name: Install kubeconform
+        run: |
+          curl -fsSL -o /tmp/kubeconform.tgz "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          tar -xzf /tmp/kubeconform.tgz -C /usr/local/bin kubeconform
+      - run: bash scripts/verify.sh
+      - name: Changed charts bump their version
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: origin/${{ github.base_ref }}
+        run: |
+          status=0
+          for dir in charts/*/; do
+            chart=${dir%/}
+            git cat-file -e "$BASE:$chart/Chart.yaml" 2>/dev/null || continue # new chart
+            git diff --quiet "$BASE...HEAD" -- "$chart" && continue          # unchanged
+            old=$(git show "$BASE:$chart/Chart.yaml" | yq '.version')
+            new=$(yq '.version' "$chart/Chart.yaml")
+            if [ "$old" = "$new" ]; then
+              echo "::error file=$chart/Chart.yaml::$chart changed but its version is still $new"
+              status=1
+            fi
+          done
+          exit "$status"

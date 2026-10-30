@@ -1,0 +1,12 @@
+{{- if .Values.clusterAgent.enabled }}
+# The leader election Lease belongs to the chart: "helm uninstall" removes it too. The agent only does get/update;
+# it writes the holder (holderIdentity) and the timestamps. An empty spec means no holder; the first replica takes it.
+apiVersion: coordination.k8s.io/v1
+kind: Lease
+metadata:
+  name: {{ include "rintup-agent.leaseName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "rintup-agent.labels" . | nindent 4 }}
+spec: {}
+{{- end }}

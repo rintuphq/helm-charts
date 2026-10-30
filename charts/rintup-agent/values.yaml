@@ -1,0 +1,103 @@
+# RintUp Kubernetes agent: default values. Schema: values.schema.json (invalid values fail at install time).
+# The install command is generated in the RintUp panel (Servers > Add Kubernetes).
+
+cluster:
+  # -- (required) Cluster name; must match the name in RintUp. Letters, digits, ".", "_", "-"; at most 63.
+  name: ""
+
+# -- Cluster key (rka_...). Shown ONCE when the cluster is added in RintUp. Use existingSecret to keep it out of
+# your shell history and the Helm release.
+apiKey: ""
+
+# -- Existing Secret that holds the key (instead of apiKey). When set, apiKey is ignored.
+existingSecret: ""
+# -- Key name inside existingSecret.
+existingSecretKey: apiKey
+
+# -- RintUp address (https:// only).
+endpoint: https://rintup.com
+# -- Plain HTTP for local tests only (kind + fake endpoint). Keep false in production.
+allowInsecureHttp: false
+
+image:
+  repository: ghcr.io/rintuphq/agent
+  # -- Defaults to the chart appVersion.
+  tag: ""
+  # -- Image digest (sha256:...). Used instead of the tag when set (recommended: pins the signed image).
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+# -- Priority class for both components (a component's own value wins).
+priorityClassName: ""
+
+# -- Egress proxy for HTTPS requests to RintUp. The Kubernetes API is never reached through the proxy.
+proxy:
+  https: ""
+  noProxy: ""
+
+# -- Extra environment variables for both components (name/value or valueFrom).
+extraEnv: []
+
+podAnnotations: {}
+podLabels: {}
+
+serviceAccount:
+  # -- Create a service account for the cluster agent.
+  create: true
+  # -- Defaults to the full name + "-cluster-agent".
+  name: ""
+  annotations: {}
+
+rbac:
+  # -- Create the ClusterRole (get/list/watch only) and the namespace Role for the Lease.
+  create: true
+
+nodeAgent:
+  # -- Node agent (DaemonSet): CPU, memory, disk, network, load. Each node appears in RintUp as a server on its first heartbeat.
+  enabled: true
+  # -- Collection interval in seconds (10-3600).
+  intervalSeconds: 60
+  # -- Host process names to watch (e.g. kubelet, containerd).
+  processes: []
+  # -- Mount the host root file system read-only at /host/root (needed for disk usage).
+  mountHostRoot: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 50m
+      memory: 64Mi
+  # -- Default: every node (including control-plane and tainted nodes).
+  tolerations:
+    - operator: Exists
+  nodeSelector:
+    kubernetes.io/os: linux
+  affinity: {}
+  priorityClassName: ""
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+
+clusterAgent:
+  # -- Cluster agent (Deployment): watches the Kubernetes API read-only; findings go to the RintUp incident center.
+  enabled: true
+  # -- Replica count. With 2 or more, a Lease elects a single leader that sends reports (no duplicate incidents).
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 192Mi
+  tolerations: []
+  nodeSelector:
+    kubernetes.io/os: linux
+  affinity: {}
+  priorityClassName: ""

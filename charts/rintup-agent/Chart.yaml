@@ -1,0 +1,26 @@
+apiVersion: v2
+name: rintup-agent
+description: RintUp Kubernetes agent. Node metrics (DaemonSet) and cluster health findings (Deployment) for RintUp uptime and incident management.
+type: application
+# Chart version (SemVer). Bump it whenever the chart changes; a new version is published on merge to main.
+version: 0.1.0
+# Agent image version (github.com/rintuphq/agents release).
+appVersion: "1.1.0"
+kubeVersion: ">=1.25.0-0"
+home: https://rintup.com
+icon: https://rintup.com/icon.svg
+sources:
+  - https://github.com/rintuphq/helm-charts
+  - https://github.com/rintuphq/agents
+keywords:
+  - monitoring
+  - uptime
+  - incident
+  - kubernetes
+  - rintup
+maintainers:
+  - name: rintuphq
+    email: dev@rintup.com
+    url: https://github.com/rintuphq
+annotations:
+  artifacthub.io/license: Apache-2.0

@@ -1,0 +1,7 @@
+# Files left out of the chart package
+.DS_Store
+.git/
+*.swp
+*.bak
+*.tmp
+ci/

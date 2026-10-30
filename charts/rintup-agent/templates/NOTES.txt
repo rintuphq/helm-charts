@@ -1,0 +1,27 @@
+RintUp Kubernetes agent installed for cluster "{{ .Values.cluster.name }}" in namespace {{ .Release.Namespace }}.
+
+{{- if .Values.nodeAgent.enabled }}
+  * node-agent (DaemonSet {{ include "rintup-agent.fullname" . }}-node): every node appears in RintUp under
+    Servers within ~2 minutes, labelled with the cluster name. Nodes that disappear for 15 minutes are archived
+    (no alert), so autoscaling does not create noise.
+{{- end }}
+{{- if .Values.clusterAgent.enabled }}
+  * cluster-agent (Deployment {{ include "rintup-agent.fullname" . }}-cluster, read-only API access): NotReady nodes,
+    CrashLoopBackOff, OOMKilled, long Pending pods, missing replicas, failed Jobs and important Warning events open
+    incidents in RintUp and resolve themselves when fixed.
+{{- end }}
+
+Check the agents:
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+  kubectl -n {{ .Release.Namespace }} logs -l app.kubernetes.io/component=cluster-agent --tail=20
+
+{{- if .Values.nodeAgent.enabled }}
+
+Pod Security: the node agent mounts host /proc{{ if .Values.nodeAgent.mountHostRoot }} and / {{ end }}read-only (hostPath),
+which the "baseline" level does not allow. If the namespace enforces Pod Security, label it:
+  kubectl label namespace {{ .Release.Namespace }} pod-security.kubernetes.io/enforce=privileged --overwrite
+{{- end }}
+
+Uninstall (removes everything this chart created, including RBAC):
+  helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}
+Then delete the cluster in RintUp (Servers > Kubernetes) to remove its nodes and history.

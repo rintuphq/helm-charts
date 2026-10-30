@@ -1,0 +1,148 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "rintup-agent values",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["cluster", "endpoint"],
+  "properties": {
+    "global": { "type": "object" },
+    "nameOverride": { "type": "string", "maxLength": 40 },
+    "fullnameOverride": { "type": "string", "maxLength": 40 },
+    "cluster": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Cluster name as created in RintUp (Servers > Add Kubernetes).",
+          "pattern": "^[A-Za-z0-9]([A-Za-z0-9._-]{0,61}[A-Za-z0-9])?$"
+        }
+      }
+    },
+    "apiKey": {
+      "type": "string",
+      "description": "Cluster key (rka_ + 43 base62 characters).",
+      "pattern": "^(rka_[0-9A-Za-z]{43})?$"
+    },
+    "existingSecret": {
+      "type": "string",
+      "pattern": "^([a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?)?$"
+    },
+    "existingSecretKey": { "type": "string", "minLength": 1, "pattern": "^[-._a-zA-Z0-9]+$" },
+    "endpoint": { "type": "string", "pattern": "^https?://[^\\s/?#@]+(/[^\\s?#]*)?$" },
+    "allowInsecureHttp": { "type": "boolean" },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string" },
+        "digest": { "type": "string", "pattern": "^(sha256:[a-f0-9]{64})?$" },
+        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+      }
+    },
+    "imagePullSecrets": { "type": "array", "items": { "type": "object", "required": ["name"] } },
+    "priorityClassName": { "type": "string" },
+    "proxy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "https": { "type": "string", "pattern": "^(https?://\\S+)?$" },
+        "noProxy": { "type": "string" }
+      }
+    },
+    "extraEnv": { "$ref": "#/definitions/env" },
+    "podAnnotations": { "$ref": "#/definitions/stringMap" },
+    "podLabels": { "$ref": "#/definitions/stringMap" },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "create": { "type": "boolean" },
+        "name": { "type": "string" },
+        "annotations": { "$ref": "#/definitions/stringMap" }
+      }
+    },
+    "rbac": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "create": { "type": "boolean" } }
+    },
+    "nodeAgent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "intervalSeconds": { "type": "integer", "minimum": 10, "maximum": 3600 },
+        "processes": {
+          "type": "array",
+          "maxItems": 50,
+          "items": { "type": "string", "pattern": "^[A-Za-z0-9._+:@-]{1,64}$" }
+        },
+        "mountHostRoot": { "type": "boolean" },
+        "resources": { "$ref": "#/definitions/resources" },
+        "tolerations": { "type": "array", "items": { "type": "object" } },
+        "nodeSelector": { "$ref": "#/definitions/stringMap" },
+        "affinity": { "type": "object" },
+        "priorityClassName": { "type": "string" },
+        "updateStrategy": { "type": "object" }
+      }
+    },
+    "clusterAgent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "replicas": { "type": "integer", "minimum": 1, "maximum": 3 },
+        "resources": { "$ref": "#/definitions/resources" },
+        "tolerations": { "type": "array", "items": { "type": "object" } },
+        "nodeSelector": { "$ref": "#/definitions/stringMap" },
+        "affinity": { "type": "object" },
+        "priorityClassName": { "type": "string" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "description": "Either apiKey or existingSecret is required.",
+      "anyOf": [
+        { "properties": { "apiKey": { "minLength": 1 } }, "required": ["apiKey"] },
+        { "properties": { "existingSecret": { "minLength": 1 } }, "required": ["existingSecret"] }
+      ]
+    },
+    {
+      "description": "cluster.name is required.",
+      "properties": { "cluster": { "properties": { "name": { "minLength": 1 } } } }
+    },
+    {
+      "description": "Plain http:// endpoint only with allowInsecureHttp (local tests).",
+      "if": { "properties": { "allowInsecureHttp": { "const": true } }, "required": ["allowInsecureHttp"] },
+      "else": { "properties": { "endpoint": { "pattern": "^https://" } } }
+    }
+  ],
+  "definitions": {
+    "stringMap": { "type": "object", "additionalProperties": { "type": "string" } },
+    "env": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "not": { "enum": ["RINTUP_TOKEN", "RINTUP_URL", "NODE_NAME", "HOST_PROC", "HOST_ROOT"] } }
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requests": { "type": "object", "additionalProperties": { "type": ["string", "number"] } },
+        "limits": { "type": "object", "additionalProperties": { "type": ["string", "number"] } }
+      }
+    }
+  }
+}
